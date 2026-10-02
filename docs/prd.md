@@ -1,0 +1,87 @@
+# 📋 Product Requirements Document (PRD)
+
+## Document Metadata
+* **Product Name**: Clipboard for macOS
+* **Version**: 1.0.0 (Production Release)
+* **Document Status**: Approved / Implemented
+* **Target Platforms**: macOS 13.0+ (Ventura, Sonoma, Sequoia, and macOS 27+)
+* **Architecture**: Apple Silicon (`arm64`) & Universal Binary Ready
+
+---
+
+## 1. Executive Summary & Product Vision
+
+macOS provides a single-item system clipboard (`NSPasteboard.general`). Every time a user copies text, a URL, a code snippet, or an image, the previous item is irretrievably overwritten. In modern knowledge workflows (engineering, design, writing, research, and analysis), users frequently juggle multiple snippets, credentials, tokens, color codes, and assets across different windows.
+
+**Clipboard for Mac** is a native, ultra-lightweight, privacy-first clipboard history manager engineered with Swift 6, AppKit, and SwiftUI. It records clipboard history seamlessly, classifies data into rich semantic types (plain text, code, links, color swatches, and images), provides an instant Spotlight/Raycast-inspired floating search HUD (`Cmd + Shift + V`), and allows direct auto-pasting into active applications with comprehensive password and confidential data protection.
+
+---
+
+## 2. Target User Personas
+
+| Persona | Role / Description | Primary Goal | Pain Points with Existing Solutions |
+| :--- | :--- | :--- | :--- |
+| **P1: The Software Engineer** | Writes Swift, Python, TypeScript, SQL, and Shell scripts across IDEs and terminal windows. | Needs instant access to recently copied snippets, stack traces, and API response payloads with syntax formatting. | Existing clipboard tools treat code like plain unformatted text and choke on large multiline payloads. |
+| **P2: The UI/UX Designer** | Works in Figma, Sketch, and browser inspection tools copying Hex/RGB colors and visual assets. | Wants to see visual color swatches and image thumbnails immediately without pasting blindly. | Traditional tools display `#3498db` as plain text without previewing the actual color or image dimensions. |
+| **P3: The Security-Conscious Professional** | Uses 1Password, Bitwarden, or Apple Keychain for credentials and sensitive API tokens. | Demands 100% confidence that master passwords, OTP tokens, and private keys are never captured in clipboard history. | Cloud-synced or electron clipboard managers leak passwords or store plain-text secrets insecurely. |
+| **P4: The Power Typist & Multi-Tasker** | Navigates macOS entirely with keyboard shortcuts and minimal mouse movements. | Wants a lightweight HUD summoned with `Cmd + Shift + V` that filters instantly and pastes with `Return`. | Heavy Electron apps (like Paste) consume 500+ MB of RAM and feel sluggish when summoned. |
+
+---
+
+## 3. Product Scope & User Journey
+
+### 3.1 Background Monitoring Experience
+1. App runs as an `LSUIElement` background accessory utility (no Dock icon clutter).
+2. The user copies text, links, colors, or images from any application (`Cmd + C`).
+3. Clipboard detects `NSPasteboard` changes with zero noticeable CPU overhead (<0.05% CPU).
+4. Content is classified, sanitized (password manager items dropped), and added to local history.
+
+### 3.2 Floating Search HUD Journey
+1. The user presses `Cmd + Shift + V` from any frontmost application (Xcode, Slack, Safari, Terminal).
+2. A sleek acrylic glassmorphism floating panel centers over the active screen.
+3. The user types to search (e.g. `swift` or `func` or `#ff5733`).
+4. The list filters instantly with keyboard navigation (`↑` / `↓` arrows).
+5. The right pane displays a rich live preview (color swatch, code box, link host, or image).
+6. Pressing `Return` closes the HUD, restores focus to the target app, and pastes the clip directly.
+
+### 3.3 Menu Bar Interaction
+* The user clicks the clipboard icon in the macOS menu bar.
+* A dropdown presents quick shortcuts: "Open Search HUD", the 8 most recent clips, "Pause/Resume Recording", "Clear Unpinned History", and "Preferences".
+
+---
+
+## 4. Detailed Functional Specifications
+
+### FR-1: Real-Time Pasteboard Monitoring
+* **Requirement**: Continuously observe `NSPasteboard.general` without event-hook blocking.
+* **Mechanism**: Timer polling `changeCount` every 350ms.
+* **Deduplication**: When identical unpinned text is copied again, it is moved to the top of history rather than duplicated.
+
+### FR-2: Content Type Classification
+* **Color Detection**: Regex matching `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`, `rgb(...)`, `hsl(...)`.
+* **URL Detection**: Validated HTTP/HTTPS schema with host parsing.
+* **Code Detection**: Heuristic syntax matching for Swift, Python, JS/TS, JSON, HTML, Shell, and SQL.
+* **Image Detection**: Extracts TIFF and PNG data, generating lightweight base64 thumbnail previews.
+
+### FR-3: Sensitive Data & Password Manager Protection
+* **Concealed Types**: Excludes items bearing `org.nspasteboard.ConcealedType`, `org.nspasteboard.AutoGeneratedType`, or `org.nspasteboard.TransientType`.
+* **Ignored Bundles**: Drops copies originating from `com.apple.keychainaccess`, `com.agilebits.onepassword`, `com.bitwarden.desktop`, `org.keepassxc.keepassxc`, and `com.lastpass.LastPass`.
+* **High-Risk Secrets**: Rejects text containing private keys (`-----BEGIN PRIVATE KEY-----`) or AWS credentials.
+
+### FR-4: Storage & History Pruning
+* **Persistent Storage**: Saved atomically to `~/Library/Application Support/Clipboard/history.json`.
+* **Configurable Limit**: Defaults to 200 items (configurable to 50, 100, 200, 500, 1000).
+* **Pinning Guarantee**: Pinned items (`isPinned: true`) are permanently retained and never pruned.
+
+### FR-5: Direct Paste & Accessibility Integration
+* **Auto-Paste Keystroke**: Synthesizes `Cmd + V` via `CGEvent` to directly paste into the target application.
+* **Graceful Degradation**: If Accessibility permission is not granted, writes to clipboard and allows standard manual pasting.
+
+---
+
+## 5. Non-Functional Requirements
+
+* **Performance**: Sub-10ms response time when summoning HUD; <0.05% CPU usage during idle.
+* **Memory Footprint**: Under 35 MB resident memory.
+* **Privacy**: 100% offline, local-only storage. Zero network calls, zero analytics telemetry.
+* **Compatibility**: Native Apple Silicon (`arm64`), macOS 13+ (Ventura, Sonoma, Sequoia, macOS 27+).
